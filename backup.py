@@ -5,6 +5,7 @@ import os
 from collections import OrderedDict
 import pickle
 import numpy as np
+
 sys.path.append(os.pardir)  # 부모 디렉터리의 파일을 가져올 수 있도록 설정
 
 
@@ -100,11 +101,27 @@ class Adagrad:
             params[key] -= self.lr * grads[key] / (np.sqrt(self.h[key]) + 1e-7)
 
 
+class Dropout:
+    def __init__(self, dropout_ratio=0.5):
+        self.dropout_ratio = dropout_ratio
+        self.mask = None
+
+    def forward(self, x, train_flg=False):
+        if train_flg:
+            self.mask = np.random.rand(*x.shape) > self.dropout_ratio
+        else:
+            return x * (1.0 - self.dropout_ratio)
+
+    def backward(self, dout):
+        return dout * self.mask
+
+
 class Model:
     """
     네트워크 모델 입니다.
 
     """
+
     def __init__(self, lr=0.01):
         """
         클래스 초기화
@@ -118,41 +135,47 @@ class Model:
     def __init_layer(self):
         layer = {}
 
+        layer['L1_Drop_W'] = Dropout.forward(self.params['L1_W'], train_flg=True)
+        layer['L1_Drop_b'] = Dropout.forward(self.params['L1_b'], train_flg=True)
         layer['L1_Affine'] = Affine(self.params['L1_W'], self.params['L1_b'])
         layer['L1_ReLU'] = ReLU()
 
+        layer['L2_Drop_W'] = Dropout.forward(self.params['L2_W'], train_flg=True)
+        layer['L2_Drop_b'] = Dropout.forward(self.params['L2_b'], train_flg=True)
         layer['L2_Affine'] = Affine(self.params['L2_W'], self.params['L2_b'])
         layer['L2_ReLU'] = ReLU()
 
+        layer['L3_Drop_W'] = Dropout.forward(self.params['L3_W'], train_flg=True)
+        layer['L3_Drop_b'] = Dropout.forward(self.params['L3_b'], train_flg=True)
         layer['L3_Affine'] = Affine(self.params['L3_W'], self.params['L3_b'])
         layer['L3_ReLU'] = ReLU()
 
+        layer['L4_Drop_W'] = Dropout.forward(self.params['L4_W'], train_flg=True)
+        layer['L4_Drop_b'] = Dropout.forward(self.params['L4_b'], train_flg=True)
         layer['L4_Affine'] = Affine(self.params['L4_W'], self.params['L4_b'])
         layer['L4_ReLU'] = ReLU()
 
+        layer['L5_Drop_W'] = Dropout.forward(self.params['L5_W'], train_flg=True)
+        layer['L5_Drop_b'] = Dropout.forward(self.params['L5_b'], train_flg=True)
         layer['L5_Affine'] = Affine(self.params['L5_W'], self.params['L5_b'])
         layer['L5_ReLU'] = ReLU()
 
+        layer['L6_Drop_W'] = Dropout.forward(self.params['L6_W'], train_flg=True)
+        layer['L6_Drop_b'] = Dropout.forward(self.params['L6_b'], train_flg=True)
         layer['L6_Affine'] = Affine(self.params['L6_W'], self.params['L6_b'])
-        layer['L6_ReLU'] = ReLU()
-
-        layer['L7_Affine'] = Affine(self.params['L7_W'], self.params['L7_b'])
-        layer['L7_ReLU'] = ReLU()
-
-        layer['L8_Affine'] = Affine(self.params['L8_W'], self.params['L8_b'])
-        layer['L8_softmaxWithLoss'] = SoftmaxWithLoss()
+        layer['L6_softmaxWithLoss'] = SoftmaxWithLoss()
 
         self.layer = layer
 
-    def __init_weight(self,):             # He 초깃값
+    def __init_weight(self, ):  # He 초깃값
 
         self.params['L1_W'] = np.random.randn(6, 15) * np.sqrt(2 / 6)
         self.params['L1_b'] = np.random.randn(1, 15)
-        for i in range(6):
-            self.params['L' + str(i + 2) + '_W'] = np.random.randn(15, 15) * np.sqrt(2 / 15)
+        for i in range(4):
+            self.params['L' + str(i + 2) + '_W'] = np.random.randn(13, 15) * np.sqrt(2 / 15)
             self.params['L' + str(i + 2) + '_b'] = np.random.randn(1, 15)
-        self.params['L8_W'] = np.random.randn(15, 6) * np.sqrt(2 / 15)
-        self.params['L8_b'] = np.random.randn(1, 6)
+        self.params['L6_W'] = np.random.randn(15, 6) * np.sqrt(2 / 15)
+        self.params['L6_b'] = np.random.randn(1, 6)
 
     def update(self, x, t):
         grads = self.gradient(x, t)
@@ -165,8 +188,8 @@ class Model:
         :param x: data
         :return: predicted answer
         """
-        for layer, func in self.layer.items():                                                  # layer 마다 forward를 해주는 친구
-            if layer == 'L8_softmaxWithLoss':
+        for layer, func in self.layer.items():  # layer 마다 forward를 해주는 친구
+            if layer == 'L6_softmaxWithLoss':
                 x = softmax(x)
             else:
                 x = func.forward(x)
@@ -179,9 +202,8 @@ class Model:
         :param t: data_label
         :return: loss
         """
-        y = self.predict(x)                                                      # 마지막에서 forward를 통해 loss를 구해준다.
-        return self.layer['L8_softmaxWithLoss'].forward(y, t)
-
+        y = self.predict(x)  # 마지막에서 forward를 통해 loss를 구해준다.
+        return self.layer['L6_softmaxWithLoss'].forward(y, t)
 
     def gradient(self, x, t):
         """
@@ -204,44 +226,31 @@ class Model:
 
         forward_L5 = self.layer['L5_ReLU'].forward(self.layer['L5_Affine'].forward(forward_L4))
 
-        forward_L6 = self.layer['L6_ReLU'].forward(self.layer['L6_Affine'].forward(forward_L5))
-
-        forward_L7 = self.layer['L7_ReLU'].forward(self.layer['L7_Affine'].forward(forward_L6))
-
-        self.layer['L8_softmaxWithLoss'].forward(self.layer['L8_Affine'].forward(forward_L7), t)
+        self.layer['L6_softmaxWithLoss'].forward(self.layer['L6_Affine'].forward(forward_L5), t)
 
         # backward & 결과 저장
         grads = {}
-
-        backprop_L8 = self.layer['L8_Affine'].backward(self.layer['L8_softmaxWithLoss'].backward())
-        grads['L8_W'] = self.layer['L8_Affine'].dW
-        grads['L8_b'] = self.layer['L8_Affine'].db
-
-        backprop_L7 = self.layer['L7_Affine'].backward(self.layer['L7_ReLU'].backward(backprop_L8))
-        grads['L7_W'] = self.layer['L7_Affine'].dW
-        grads['L7_b'] = self.layer['L7_Affine'].db
-
-        backprop_L6 = self.layer['L6_Affine'].backward(self.layer['L6_ReLU'].backward(backprop_L7))
+        backprop_L7 = self.layer['L6_Affine'].backward(self.layer['L6_softmaxWithLoss'].backward())
         grads['L6_W'] = self.layer['L6_Affine'].dW
         grads['L6_b'] = self.layer['L6_Affine'].db
 
-        backprop_L5 = self.layer['L5_Affine'].backward(self.layer['L5_ReLU'].backward(backprop_L6))
+        backprop_L6 = self.layer['L5_Affine'].backward(self.layer['L5_ReLU'].backward(backprop_L7))
         grads['L5_W'] = self.layer['L5_Affine'].dW
         grads['L5_b'] = self.layer['L5_Affine'].db
 
-        backprop_L4 = self.layer['L4_Affine'].backward(self.layer['L4_ReLU'].backward(backprop_L5))
+        backprop_L5 = self.layer['L4_Affine'].backward(self.layer['L4_ReLU'].backward(backprop_L6))
         grads['L4_W'] = self.layer['L4_Affine'].dW
         grads['L4_b'] = self.layer['L4_Affine'].db
 
-        backprop_L3 = self.layer['L3_Affine'].backward(self.layer['L3_ReLU'].backward(backprop_L4))
+        backprop_L4 = self.layer['L3_Affine'].backward(self.layer['L3_ReLU'].backward(backprop_L5))
         grads['L3_W'] = self.layer['L3_Affine'].dW
         grads['L3_b'] = self.layer['L3_Affine'].db
 
-        backprop_L2 = self.layer['L2_Affine'].backward(self.layer['L2_ReLU'].backward(backprop_L3))
+        backprop_L3 = self.layer['L2_Affine'].backward(self.layer['L2_ReLU'].backward(backprop_L4))
         grads['L2_W'] = self.layer['L2_Affine'].dW
         grads['L2_b'] = self.layer['L2_Affine'].db
 
-        backprop_L1 = self.layer['L1_Affine'].backward(self.layer['L1_ReLU'].backward(backprop_L2))
+        backprop_L2 = self.layer['L1_Affine'].backward(self.layer['L1_ReLU'].backward(backprop_L3))
         grads['L1_W'] = self.layer['L1_Affine'].dW
         grads['L1_b'] = self.layer['L1_Affine'].db
 

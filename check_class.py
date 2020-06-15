@@ -128,6 +128,7 @@ class Model:
         self.params['L5_b'] = np.random.randn(1, 6)
 
     def update(self, x, t):
+        print(self.params['L1_W'])
         grads = self.gradient(x, t)
         self.optimizer.update(self.params, grads)
 

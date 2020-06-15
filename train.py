@@ -3,6 +3,7 @@
 import sys, os
 import argparse
 import time
+import matplotlib.pyplot as plt
 sys.path.append(os.pardir)
 
 import numpy as np
@@ -50,7 +51,6 @@ class Trainer:
         self.train_loss_list = []
         self.train_acc_list = []
         self.test_acc_list = []
-
 
     def train_step(self):
         # 렌덤 트레인 배치 생성
@@ -109,13 +109,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="train.py --help 로 설명을 보시면 됩니다."
                                                  "사용예)python train.py --sf=myparam --epochs=10")
     parser.add_argument("--sf", required=False, default="params.pkl", help="save_file_name")
-    parser.add_argument("--epochs", required=False, default=20, help="epochs : default=20")
+    parser.add_argument("--epochs", required=False, default=1000, help="epochs : default=20")
     parser.add_argument("--mini_batch_size", required=False, default=100, help="mini_batch_size : default=100")
-    parser.add_argument("--learning_rate", required=False, default=0.01, help="learning_rate : default=0.01")
+    parser.add_argument("--learning_rate", required=False, default=0.05, help="learning_rate : default=0.01")
     args = parser.parse_args()
 
     # 데이터셋 탑재
-    (x_train, t_train), (x_test, t_test) = load_AReM(one_hot_label=False)
+    (x_train, t_train), (x_test, t_test) = load_AReM(one_hot_label=True)
 
     # 모델 초기화
     network = Model()
