@@ -83,52 +83,89 @@ class SoftmaxWithLoss:
         dx = (self.y - self.t) / batch_size
         return dx
 
-
-class Adagrad:
+class Adamax:
     def __init__(self, lr):
         self.lr = lr
-        self.h = None
+        self.m = None
+        self.v = None
+        self.b1 = 0.9
+        self.b2 = 0.999
+        self.t = 0
+
     def update(self, params, grads):
-        if self.h is None:
-            self.h = {}
+        if self.m is None:
+            self.m = {}
             for key, val in params.items():
-                self.h[key] = np.zeros_like(val)
+                self.m[key] = np.zeros_like(val)
+        if self.v is None:
+            self.v = {}
+            for key, val in params.items():
+                self.v[key] = np.zeros_like(val)
 
         for key in params.keys():
-            self.h[key] += grads[key] * grads[key]
-            params[key] -= self.lr * grads[key] / (np.sqrt(self.h[key]) + 1e-7)
-
+            self.t += 1
+            self.m[key] = (self.b1 * self.m[key]) + ((1 - self.b1) * grads[key])
+            self.v[key] = np.maximum((self.b2 * self.v[key]), np.abs(grads[key]))
+            params[key] -= (self.lr / (1 - self.b1 ** self.t)) * (self.m[key] / (self.v[key] + 1e-8))
 
 class Model:
     """
     네트워크 모델 입니다.
 
     """
-    def __init__(self, lr=0.01):
+    def __init__(self, lr=0.009):
         """
         클래스 초기화
         """
-
+        self.x = 0
+        self.lr = lr
+        self.layer = {}
         self.params = {}
         self.__init_weight()
-     #   self.__init_layer()
-        self.optimizer = Adagrad(lr)
+        self.__init_layer()
+        self.optimizer = Adamax(lr)
 
-    #def __init_layer(self):
+    def __init_layer(self):
+        layer = {}
 
+
+        layer['L1_Affine'] = Affine(self.params['L1_W'], self.params['L1_b'])
+        layer['L1_ReLU'] = ReLU()
+
+
+        layer['L2_Affine'] = Affine(self.params['L2_W'], self.params['L2_b'])
+        layer['L2_ReLU'] = ReLU()
+
+
+        layer['L3_Affine'] = Affine(self.params['L3_W'], self.params['L3_b'])
+        layer['L3_ReLU'] = ReLU()
+
+        layer['L4_Affine'] = Affine(self.params['L4_W'], self.params['L4_b'])
+        layer['L4_ReLU'] = ReLU()
+
+        layer['L5_Affine'] = Affine(self.params['L5_W'], self.params['L5_b'])
+        layer['L5_softmaxWithLoss'] = SoftmaxWithLoss()
+
+        self.layer = layer
 
     def __init_weight(self,):             # He 초깃값
 
-        self.params['L1_W'] = np.random.randn(6, 10) * np.sqrt(2 / 6)
-        self.params['L1_b'] = np.random.randn(1, 10)
-        for i in range(3):
-            self.params['L' + str(i + 2) + '_W'] = np.random.randn(10, 10) * np.sqrt(2 / 10)
-            self.params['L' + str(i + 2) + '_b'] = np.random.randn(1, 10)
-        self.params['L5_W'] = np.random.randn(10, 6) * np.sqrt(2 / 10)
+        self.params['L1_W'] = np.random.randn(6, 13) * np.sqrt(2 / 6)
+        self.params['L1_b'] = np.random.randn(1, 13)
+
+        self.params['L2_W'] = np.random.randn(13, 27) * np.sqrt(2 / 13)
+        self.params['L2_b'] = np.random.randn(1, 27)
+
+        self.params['L3_W'] = np.random.randn(27, 55) * np.sqrt(2 / 27)
+        self.params['L3_b'] = np.random.randn(1, 55)
+
+        self.params['L4_W'] = np.random.randn(55, 111) * np.sqrt(2 / 55)
+        self.params['L4_b'] = np.random.randn(1, 111)
+
+        self.params['L5_W'] = np.random.randn(111, 6) * np.sqrt(2 / 111)
         self.params['L5_b'] = np.random.randn(1, 6)
 
     def update(self, x, t):
-        print(self.params['L1_W'])
         grads = self.gradient(x, t)
         self.optimizer.update(self.params, grads)
 
@@ -139,8 +176,11 @@ class Model:
         :param x: data
         :return: predicted answer
         """
-        for layer in self.layers.values():                                                  # layer 마다 forward를 해주는 친구
-            x = layer.forward(x)
+        for layer, func in self.layer.items():                                                  # layer 마다 forward를 해주는 친구
+            if layer == 'L5_softmaxWithLoss':
+                x = softmax(x)
+            else:
+                x = func.forward(x)
         return x
 
     def loss(self, x, t):
@@ -150,9 +190,8 @@ class Model:
         :param t: data_label
         :return: loss
         """
-        y = self.predict(x)                                                      # 마지막에서 forward를 통해 loss를 구해준다.
-        return self.last_layer.forward(y, t)
-
+        y = self.predict(x)  # 마지막에서 forward를 통해 loss를 구해준다.
+        return self.layer['L5_softmaxWithLoss'].forward(y, t)
 
     def gradient(self, x, t):
         """
@@ -164,53 +203,46 @@ class Model:
         :return: grads
         """
         # forward
-        affine_L1 = Affine(self.params['L1_W'], self.params['L1_b'])
-        relu_L1 = ReLU()
 
-        forward_L1 = relu_L1.forward(affine_L1.forward(x))
+        forward_L1 = self.layer['L1_ReLU'].forward(self.layer['L1_Affine'].forward(x))
 
-        affine_L2 = Affine(self.params['L2_W'], self.params['L2_b'])
-        relu_L2 = ReLU()
+        forward_L2 = self.layer['L2_ReLU'].forward(self.layer['L2_Affine'].forward(forward_L1))
 
-        forward_L2 = relu_L2.forward(affine_L2.forward(forward_L1))
+        forward_L3 = self.layer['L3_ReLU'].forward(self.layer['L3_Affine'].forward(forward_L2))
 
-        affine_L3 = Affine(self.params['L3_W'], self.params['L3_b'])
-        relu_L3 = ReLU()
+        forward_L4 = self.layer['L4_ReLU'].forward(self.layer['L4_Affine'].forward(forward_L3))
 
-        forward_L3 = relu_L3.forward(affine_L3.forward(forward_L2))
-
-        affine_L4 = Affine(self.params['L4_W'], self.params['L4_b'])
-        relu_L4 = ReLU()
-
-        forward_L4 = relu_L4.forward(affine_L4.forward(forward_L3))
-
-        affine_L5 = Affine(self.params['L5_W'], self.params['L5_b'])
-        softwithloss = SoftmaxWithLoss()
-
-        softwithloss.forward(affine_L5.forward(forward_L4), t)
-
+        self.layer['L5_softmaxWithLoss'].forward(self.layer['L5_Affine'].forward(forward_L4), t)
 
         # backward & 결과 저장
         grads = {}
-        backprop_L6 = affine_L5.backward(softwithloss.backward())
-        grads['L5_W'] = affine_L5.dW
-        grads['L5_b'] = affine_L5.db
 
-        backprop_L5 = affine_L4.backward(relu_L4.backward(backprop_L6))
-        grads['L4_W'] = affine_L4.dW
-        grads['L4_b'] = affine_L4.db
+        backprop_L5 = self.layer['L5_Affine'].backward(self.layer['L5_softmaxWithLoss'].backward())
+        grads['L5_W'] = self.layer['L5_Affine'].dW
+        grads['L5_b'] = self.layer['L5_Affine'].db
 
-        backprop_L4 = affine_L3.backward(relu_L3.backward(backprop_L5))
-        grads['L3_W'] = affine_L3.dW
-        grads['L3_b'] = affine_L3.db
+        backprop_L4 = self.layer['L4_Affine'].backward(self.layer['L4_ReLU'].backward(backprop_L5))
+        grads['L4_W'] = self.layer['L4_Affine'].dW
+        grads['L4_b'] = self.layer['L4_Affine'].db
 
-        backprop_L3 = affine_L2.backward(relu_L2.backward(backprop_L4))
-        grads['L2_W'] = affine_L2.dW
-        grads['L2_b'] = affine_L2.db
+        backprop_L3 = self.layer['L3_Affine'].backward(self.layer['L3_ReLU'].backward(backprop_L4))
+        grads['L3_W'] = self.layer['L3_Affine'].dW
+        grads['L3_b'] = self.layer['L3_Affine'].db
 
-        backprop_L2 = affine_L1.backward(relu_L1.backward(backprop_L3))
-        grads['L1_W'] = affine_L1.dW
-        grads['L1_b'] = affine_L1.db
+        backprop_L2 = self.layer['L2_Affine'].backward(self.layer['L2_ReLU'].backward(backprop_L3))
+        grads['L2_W'] = self.layer['L2_Affine'].dW
+        grads['L2_b'] = self.layer['L2_Affine'].db
+
+        backprop_L1 = self.layer['L1_Affine'].backward(self.layer['L1_ReLU'].backward(backprop_L2))
+        grads['L1_W'] = self.layer['L1_Affine'].dW
+        grads['L1_b'] = self.layer['L1_Affine'].db
+
+        i = 1
+        for key in self.params.keys():
+            if key != 'L' + str(i) + '_b':
+                grads[key] = (grads[key] / x.shape[0]) + (0.000009 * self.params[key])
+            else:
+                i += 1
 
         return grads
 
@@ -236,4 +268,4 @@ class Model:
             params = pickle.load(f)
         for key, val in params.items():
             self.params[key] = val
-        pass
+        self.__init_layer()
