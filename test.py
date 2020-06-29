@@ -6,7 +6,7 @@ import numpy as np
 sys.path.append(os.pardir)
 
 from AReM import *
-from check_class import *
+from model import *
 
 
 class Tester:
@@ -57,11 +57,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     (_, _), (x_test, t_test) = load_AReM(one_hot_label=False)
+
     network = Model()
 
     tester = Tester(network, x_test, t_test)
 
-    network.load_params()
+    network.load_params(args.sf)
 
 
     # 배치사이즈100으로 accuracy test, 다른 배치사이즈로 학습했다면 결과가 달라질 수 있습니다.
